@@ -14,7 +14,7 @@ MNIST: dataset
 To train SNNs using BPTC, run this command:
 
 ## Evaluation
-To evaluate SNNs on MNIST or N-MNISt, run this command:
+To evaluate SNNs on MNIST or N-MNIST, run this command:
 
 ## Pre-trained models
 You can download pretrained models here:
