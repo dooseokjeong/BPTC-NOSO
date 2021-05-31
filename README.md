@@ -7,6 +7,9 @@ BPTC is backpropagation of errors based on temporal code, which is mathematicall
 
 ### For unfolded SNNs
 
+### Dataset
+MNIST: dataset
+
 ## Training
 To train SNNs using BPTC, run this command:
 
