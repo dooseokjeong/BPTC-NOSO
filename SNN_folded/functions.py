@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import cupy as cp 
 
-# dudu evaluation
+# dtdu evaluation
 def dtdu(tau_m, tau_s, sp, um, us, grad_u):
     temp = um/tau_m - us/tau_s
     temp = cp.where(temp != 0, 1/temp, temp)
