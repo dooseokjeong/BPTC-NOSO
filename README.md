@@ -40,10 +40,6 @@ cd SNN_unfolded
 python evaluation_FCN_folded_MNIST.py
 ```
 
-
-## Pre-trained models
-You can download pretrained models here:
-
 ## Results
 Our model achieves the following performance on: 
 MNIST dataset
