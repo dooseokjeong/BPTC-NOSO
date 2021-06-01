@@ -7,12 +7,11 @@ import torch
 from networks import fcn
 from networks import cnn
 
-from pysnn.datasets import nmnist_train_test
+from datasets import nmnist_train_test
 
 def load_data(task, batch_size):
     # Load MNIST dataset
-    if task == 'mnist':
-        
+    if task == 'mnist':        
         data_path =  './Dataset/MNIST/'
         
         train_dataset = torchvision.datasets.MNIST(root= data_path, train=True, download=True, transform=transforms.ToTensor())    
@@ -22,8 +21,7 @@ def load_data(task, batch_size):
         test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=0)
     
     # Load N-MNIST dataset
-    elif task == 'nmnist':
-        
+    elif task == 'nmnist':        
         data_path = './Dataset/NMNIST'  # nmnist data directory
         
         if os.path.isdir(data_path):
@@ -49,7 +47,7 @@ def make_model(network, task, thresh, tau_m, tau_s, num_steps, frate):
 
 
 def load_model(names, model):
-    PATH =  './checkpoint/' + names
+    PATH =  './Pretrained_params/' + names
     checkpoint = torch.load(PATH)
     model.load_state_dict(checkpoint['net'])
     # epoch = checkpoint['epoch']
