@@ -39,8 +39,8 @@ def lr_scheduler(learning_rate, epoch, decay_epoch, decay_rate, minlr):
         learning_rate1 = learning_rate
     return learning_rate1
 
-names = 'spiking_model_mlp4'
-data_path =  '../raw/' #todo: input your data path
+names = 'spiking_model_fcn'
+data_path =  './Dataset/'
 train_dataset = torchvision.datasets.MNIST(root= data_path, train=True, download=True, transform=transforms.ToTensor())
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 test_set = torchvision.datasets.MNIST(root= data_path, train=False, download=True, transform=transforms.ToTensor())
