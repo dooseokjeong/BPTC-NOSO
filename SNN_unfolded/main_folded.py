@@ -18,8 +18,8 @@ dtype = torch.float
 
 parser = argparse.ArgumentParser(description='BPTC+NOSO MNIST/N-MNIST')
 
-parser.add_argument('--task', type=str, default='nmnist', help='which task to run (mnist or nmnist)')
-parser.add_argument('--network', type=str, default='cnn', help='which network to run (fcn or cnn)')
+parser.add_argument('--task', type=str, default='mnist', help='which task to run (mnist or nmnist)')
+parser.add_argument('--network', type=str, default='fcn', help='which network to run (fcn or cnn)')
 parser.add_argument('--eval_mode', type=bool, default='True', help='evaluation without learning')
 
 # Hyperparameters
@@ -28,7 +28,7 @@ parser.add_argument('--tau_m', type=float, default=80, help='Time constant of me
 parser.add_argument('--tau_s', type=float, default=20, help='Time constant of synaptic current kernel [ms]')
 parser.add_argument('--batch_size', type=int, default=100, help='Batch size')
 parser.add_argument('--num_epochs', type=int, default=100, help='Maximum number of epochs')
-parser.add_argument('--num_steps', type=int, default=64, help='Number of time steps')
+parser.add_argument('--num_steps', type=int, default=32, help='Number of time steps')
 parser.add_argument('--frate', type=float, default=0.2, help='Maximum input firing rate [x1000 Hz]')
 parser.add_argument('--weight_decay', type=float, default=1E-2, help='Weight decay (L2 regularization) coefficient')
 parser.add_argument('--learning_rate', type=float, default=5E-2, help='Initial learning rate')
