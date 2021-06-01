@@ -13,14 +13,31 @@ pip install -r requirements.txt
 MNIST: dataset
 
 ## Training
-To train SNNs (FCN) using BPTC on MNIST, run this command:
+To train a folded SNN (FCN) using BPTC on MNIST, run this command:
 ```train
 cd SNN_folded
 python main_FCN_folded_MNIST.py
 ```
 
+To train unfolded SNNs (FCN and CNN) using BPTC on MNIST and N-MNIST, run this command:
+```train
+cd SNN_unfolded
+python main_FCN_folded_MNIST.py
+```
+
 ## Evaluation
-To evaluate SNNs on MNIST or N-MNIST, run this command:
+To evaluate a folded SNN (FCN) on MNIST, run this command:
+```evaluation
+cd SNN_folded
+python evaluation_FCN_folded_MNIST.py
+```
+
+To evaluate unfolded SNNs (FCN and CNN) on MNIST or N-MNIST, run this command:
+```evaluation
+cd SNN_unfolded
+python evaluation_FCN_folded_MNIST.py
+```
+
 
 ## Pre-trained models
 You can download pretrained models here:
