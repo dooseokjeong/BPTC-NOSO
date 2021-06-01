@@ -33,7 +33,7 @@ nlayer = len(cfg_fc)-1  # Number of layers
 # Loading pre-trained weights
 w = [cp.load('./Pretrained_params/w1.npy'), cp.load('./Pretrained_params/w2.npy')] # Weight initialization
 
-data_path =  './dataset/'
+data_path =  './Dataset/'
 test_set = torchvision.datasets.MNIST(root= data_path, train=False, download=True, transform=transforms.ToTensor())
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=0)
 
