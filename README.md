@@ -11,6 +11,7 @@ pip install -r requirements.txt
 
 ### Dataset
 MNIST: dataset
+N-MNIST dataset loader was adapted from [PySNN](https://github.com/BasBuller/PySNN).
 
 ## Training
 To train a folded SNN (FCN) using BPTC on MNIST, run this command:
