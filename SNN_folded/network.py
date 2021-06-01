@@ -7,7 +7,8 @@ def SNN_folded(cfg_fc,
                 tau_m, 
                 tau_s, 
                 thresh, 
-                num_steps, 
+                num_steps,
+                frate,
                 inputs, 
                 batch_size, 
                 w, 
@@ -43,7 +44,7 @@ def SNN_folded(cfg_fc,
 
         for t in range(num_steps):
             # Poisson spike generation
-            sp_in = inputs > cp.random.rand(inputs.shape[0], inputs.shape[1])
+            sp_in = inputs*frate > cp.random.rand(inputs.shape[0], inputs.shape[1])
             # Calculation of first hidden layer
             ref[0], vm[0], vs[0], um[0], us[0], mem[0], sp[0] = noso(tau_m, tau_s, thresh, sp_in, ref[0], vm[0], vs[0], w[0], sp[0])
             # dtdu evaluation upon postsynaptic spiking and accumulation of dtdu onto dtdu_append
@@ -65,7 +66,7 @@ def SNN_folded(cfg_fc,
     else:
         h2_out = cp.zeros((batch_size, cfg_fc[-1])) 
         for t in range(num_steps):                   
-            sp_in = inputs > cp.random.rand(inputs.shape[0], inputs.shape[1])
+            sp_in = inputs*frate > cp.random.rand(inputs.shape[0], inputs.shape[1])
             #first hidden layer
             ref[0], vm[0], vs[0], um[0], us[0], mem[0], sp[0] = noso(tau_m, tau_s, thresh, sp_in, ref[0], vm[0], vs[0], w[0], sp[0])
             spike_sum[0] += sp[0]
