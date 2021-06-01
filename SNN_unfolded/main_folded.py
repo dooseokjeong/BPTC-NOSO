@@ -99,7 +99,7 @@ def train(model, train_loader, criterion, epoch, optimizer, scheduler):
         optimizer.step()
         spike_map_train = outputs[2]
     
-    # min learning rate
+    # learning rate scheduling
     scheduler.step()
     optimizer.param_groups[0]["lr"] = np.clip(optimizer.param_groups[0]["lr"], args.min_lr, args.learning_rate)
         
