@@ -5,9 +5,9 @@ BPTC is backpropagation of errors based on temporal code, which is mathematicall
 ## Requirements
 To install requirements:
 
-'''setup
+```setup
 pip install -r requirements.txt
-'''
+```
 
 ### Dataset
 MNIST: dataset
