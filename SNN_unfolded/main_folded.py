@@ -26,7 +26,7 @@ parser.add_argument('--eval_mode', type=bool, default='True', help='evaluation w
 parser.add_argument('--thresh', type=float, default=0.05, help='Spiking threshold [mV]')
 parser.add_argument('--tau_m', type=float, default=80, help='Time constant of membrane potential kernel [ms]')
 parser.add_argument('--tau_s', type=float, default=20, help='Time constant of synaptic current kernel [ms]')
-parser.add_argument('--batch_size', type=int, default=100, help='Batch size')
+parser.add_argument('--batch_size', type=int, default=200, help='Batch size')
 parser.add_argument('--num_epochs', type=int, default=100, help='Maximum number of epochs')
 parser.add_argument('--num_steps', type=int, default=32, help='Number of time steps')
 parser.add_argument('--frate', type=float, default=0.2, help='Maximum input firing rate [x1000 Hz]')
