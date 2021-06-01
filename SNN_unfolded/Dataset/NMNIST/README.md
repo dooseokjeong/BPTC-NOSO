@@ -1,1 +1,1 @@
-Place the MNIST dataset in this folder.
+Place the N-MNIST dataset in this folder.
