@@ -37,6 +37,24 @@ def load_data(task, batch_size):
     return train_loader, test_loader
 
 
+def load_hyperparemeter(names):
+    # return thresh, tau_m, tau_s, num_steps, frate
+    if names == 'mnist_fcn_saved':
+        return 0.05, 80, 20, 32, 0.2
+
+    elif names == 'mnist_cnn_saved':
+        return 0.05, 80, 20, 64, 0.2
+
+    elif names == 'nmnist_fcn_saved':
+        return 0.05, 80, 20, 300, 0.2
+
+    elif names == 'nmnist_cnn_saved':
+        return 0.05, 80, 20, 300, 0.2
+    
+    else:
+        print('enter correct model name')
+
+
 def make_model(network, task, thresh, tau_m, tau_s, num_steps, frate):
     if network == 'fcn':
         return fcn(task, thresh, tau_m, tau_s, num_steps, frate)
@@ -83,4 +101,4 @@ def save_model(names, model, acc, epoch, acc_hist, train_loss_hist, test_loss_hi
     if acc == best_acc:
         torch.save(state, './checkpoint/' + names + '.best')
         
-        
+ 
