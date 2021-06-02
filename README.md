@@ -24,7 +24,7 @@ python main_FCN_folded_MNIST.py
 To train unfolded SNNs (FCN and CNN) using BPTC on MNIST and N-MNIST, run this command:
 ```train
 cd SNN_unfolded
-python main_FCN_folded_MNIST.py
+python main_FCN_folded.py --eval_mode False
 ```
 
 ## Evaluation
@@ -37,7 +37,7 @@ python evaluation_FCN_folded_MNIST.py
 To evaluate unfolded SNNs (FCN and CNN) on MNIST or N-MNIST, run this command:
 ```evaluation
 cd SNN_unfolded
-python evaluation_FCN_folded_MNIST.py
+python main_FCN_folded.py --eval_mode True
 ```
 
 ## Results
