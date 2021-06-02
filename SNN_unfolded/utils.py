@@ -52,7 +52,7 @@ def load_hyperparemeter(names):
         return 0.05, 80, 20, 300, 0.2
     
     else:
-        print('enter correct model name')
+        print('enter the correct model name')
 
 
 def make_model(network, task, thresh, tau_m, tau_s, num_steps, frate):
