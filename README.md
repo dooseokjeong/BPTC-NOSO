@@ -37,7 +37,7 @@ python evaluation_FCN_folded_MNIST.py
 To evaluate unfolded SNNs (FCN and CNN) on MNIST or N-MNIST, run this command:
 ```evaluation
 cd SNN_unfolded
-python main_unfolded.py --eval_mode True
+python main_unfolded.py --task <mnist or nmist> -- network <fcn or cnn> --eval_mode True
 ```
 
 ## Results
