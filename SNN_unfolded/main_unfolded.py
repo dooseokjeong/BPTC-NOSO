@@ -1,16 +1,13 @@
 from __future__ import print_function
-import torchvision
-import torchvision.transforms as transforms
-import os
 import time
 import torch
 import torch.nn as nn
 import numpy as np
 import argparse
 
+from utils import load_data
 from utils import load_hyperparemeter
 from utils import make_model
-from utils import load_data
 from utils import load_model
 from utils import save_model
 
