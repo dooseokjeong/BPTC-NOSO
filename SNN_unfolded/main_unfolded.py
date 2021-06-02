@@ -8,6 +8,7 @@ import torch.nn as nn
 import numpy as np
 import argparse
 
+from utils import load_hyperparemeter
 from utils import make_model
 from utils import load_data
 from utils import load_model
@@ -20,7 +21,7 @@ parser = argparse.ArgumentParser(description='BPTC+NOSO MNIST/N-MNIST')
 
 parser.add_argument('--task', type=str, default='mnist', help='which task to run (mnist or nmnist)')
 parser.add_argument('--network', type=str, default='fcn', help='which network to run (fcn or cnn)')
-parser.add_argument('--eval_mode', type=bool, default=True, help='evaluation without learning')
+parser.add_argument('--eval_mode', type=bool, default=False, help='evaluation without learning')
 
 # Hyperparameters
 parser.add_argument('--thresh', type=float, default=0.05, help='Spiking threshold [mV]')
@@ -40,12 +41,11 @@ args = parser.parse_args()
 
 def main():
     names = args.task + '_' + args.network
-    train_loader, test_loader = load_data(args.task, args.batch_size) 
-    model = make_model(args.network, args.task, args.thresh, args.tau_m, args.tau_s, args.num_steps, args.frate).to(device)
-   
+    train_loader, test_loader = load_data(args.task, args.batch_size)   
     criterion = nn.CrossEntropyLoss().to(device)
     
     if args.eval_mode == False:
+        model = make_model(args.network, args.task, args.thresh, args.tau_m, args.tau_s, args.num_steps, args.frate).to(device)
         optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_decay_interval, gamma=args.lr_decay_rate)
         
@@ -77,6 +77,8 @@ def main():
 
     elif args.eval_mode == True:
         names = names + '_saved'
+        thresh, tau_m, tau_s, num_steps, frate = load_hyperparemeter(names)
+        model = make_model(args.network, args.task, thresh, tau_m, tau_s, num_steps, frate).to(device)
         model = load_model(names, model)
         test_loss, spike_map_test, acc = test(model, test_loader, criterion)
         print("Test Loss: {:.3f}.. ".format(test_loss).ljust(19), "Test Accuracy: {:.3f}".format(acc))
