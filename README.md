@@ -15,10 +15,10 @@ pip install -r requirements.txt
 [N-MNIST](https://www.garrickorchard.com/datasets/n-mnist) dataset loader was adapted from [PySNN](https://github.com/BasBuller/PySNN) and modified.
 
 ## Training
-To train a folded SNN (FCN) using BPTC on MNIST, run this command:
+To train a folded SNN (FCN) using BPTC on MNIST or N-MNIST, run this command:
 ```train
 cd SNN_folded
-python main_FCN_folded_MNIST.py
+python main_folded.py --task <mnist or nmist> --mode train
 ```
 
 To train unfolded SNNs (FCN and CNN) using BPTC on MNIST and N-MNIST, run this command:
@@ -28,10 +28,10 @@ python main_unfolded.py --task <mnist or nmist> --network <fcn or cnn> --mode tr
 ```
 
 ## Evaluation
-To evaluate a folded SNN (FCN) on MNIST, run this command:
+To evaluate a folded SNN (FCN) on MNIST or N-MNIST, run this command:
 ```evaluation
 cd SNN_folded
-python evaluation_FCN_folded_MNIST.py
+python main_folded.py --task <mnist or nmist> --mode eval
 ```
 
 To evaluate unfolded SNNs (FCN and CNN) on MNIST or N-MNIST, run this command:
