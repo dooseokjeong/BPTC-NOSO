@@ -1,4 +1,3 @@
-cupy==8.2.0
 matplotlib==3.4.0
 numpy==1.19.1
 sklearn==0.0
