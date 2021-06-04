@@ -1,5 +1,7 @@
+cupy==8.2.0
+matplotlib==3.4.0
 numpy==1.19.1
+sklearn==0.0
+pandas==1.2.4
 torch==1.8.1
 torchvision==0.9.1
-cupy==8.2.0
-pandas==1.2.4
