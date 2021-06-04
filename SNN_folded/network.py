@@ -1,78 +1,113 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
-import cupy as cp 
-from functions import noso, dtdu 
 
-def SNN_folded(cfg_fc, 
-                tau_m, 
-                tau_s, 
-                thresh, 
-                num_steps,
-                frate,
-                inputs, 
-                batch_size, 
-                w, 
-                grad_eval=True):
+from functions import noso
+from functions import dtdu_backward
+from functions import dodt
 
-    nlayer = len(cfg_fc)-1
-    vm = [cp.zeros((batch_size, cfg_fc[i])) for i in range(nlayer)]
-    vs = [cp.zeros((batch_size, cfg_fc[i])) for i in range(nlayer)]
-    um = [cp.zeros((batch_size, cfg_fc[i+1])) for i in range(nlayer)]
-    us = [cp.zeros((batch_size, cfg_fc[i+1])) for i in range(nlayer)]
-    # membrane potential: mem = um - us
-    mem = [cp.zeros((batch_size, cfg_fc[i+1])) for i in range(nlayer)]              
-    # Spike record
-    sp = [cp.zeros((batch_size, cfg_fc[i+1]),dtype=bool) for i in range(nlayer)]   
-    # Refractory flag
-    ref = [cp.ones((batch_size, cfg_fc[i+1])) for i in range(nlayer)]               
-    # Cumulative number of spikes
-    spike_sum = [cp.zeros((batch_size, cfg_fc[i+1])) for i in range(nlayer)]        
-    # Output spike timings
-    outt = num_steps * cp.ones((batch_size, cfg_fc[-1]))                              
-    # Vectorize input tensor
-    inputs = inputs.view(batch_size,-1)    
-    # Convert input tensor to cupy array                                         
-    inputs = cp.asarray(inputs)                                                     
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+dtype = torch.float
 
-    if grad_eval:
-        # Initialization of dtdu array
-        dtdu_append = [cp.zeros((batch_size, cfg_fc[i+1])) for i in range(nlayer)]
-        # Initialization of v matrix to store v array
-        v = [cp.zeros((batch_size, cfg_fc[i+1], cfg_fc[i])) for i in range(nlayer)]
-        # Initialization of v matrix to store dvdt matrix
-        dvdt_append = [cp.zeros((batch_size, cfg_fc[i+1], cfg_fc[i])) for i in range(nlayer)]
+class fcn(nn.Module):
+    def __init__(self, task, thresh, tau_m, tau_s, num_steps, frate):
+        super(fcn, self).__init__()
+        self.task = task
+        self.thresh = thresh
+        self.tau_m = tau_m
+        self.tau_s = tau_s
+        self.num_steps = num_steps
+        self.frate = frate
+        
+        if self.task == 'mnist':
+            self.cfg_fc = [784, 400, 10]
+            
+        elif self.task == 'nmnist':
+            self.cfg_fc = [34*34*2, 800, 10]
+            self.num_steps = 300
+            
+        self.fc1 = nn.Linear(self.cfg_fc[0], self.cfg_fc[1], bias=False).float()
+        self.fc2 = nn.Linear(self.cfg_fc[1], self.cfg_fc[2], bias=False).float()        
+        nn.init.normal_(self.fc1.weight, mean=0, std=np.sqrt(2/self.cfg_fc[0]))
+        nn.init.normal_(self.fc2.weight, mean=0, std=np.sqrt(2/self.cfg_fc[1]))
+        
+    def forward(self, input, batch_size):
+        h1_vm = h1_vs = torch.zeros(batch_size, self.cfg_fc[0], dtype=dtype, device=device)
+        h1_um = h1_us = h1_spike = torch.zeros(batch_size, self.cfg_fc[1], dtype=dtype, device=device)
+        h1_sav = torch.ones(batch_size, self.cfg_fc[1], dtype=dtype, device=device)
+        
+        h2_vm = h2_vs = torch.zeros(batch_size, self.cfg_fc[1], dtype=dtype, device=device)
+        h2_um = h2_us = h2_spike = h2_u = torch.zeros(batch_size, self.cfg_fc[2], dtype=dtype, device=device)
+        h2_sav = torch.ones(batch_size, self.cfg_fc[2], dtype=dtype, device=device)
+        
+        # output 
+        out_t = self.num_steps * torch.ones(batch_size, self.cfg_fc[2], dtype=dtype, device=device)
+        out_u = torch.zeros(batch_size, self.cfg_fc[2], dtype=dtype, device=device)
+        sum_sp = torch.zeros(len(self.cfg_fc))
+        
+        # for backprop
+        h1_v = torch.zeros(batch_size, self.cfg_fc[1], self.cfg_fc[0], dtype=dtype, device=device)
+        h2_v = torch.zeros(batch_size, self.cfg_fc[2], self.cfg_fc[1], dtype=dtype, device=device)
 
-        for t in range(num_steps):
-            # Poisson spike generation
-            sp_in = inputs*frate > cp.random.rand(inputs.shape[0], inputs.shape[1])
+        h1_dvdt = torch.zeros(batch_size, self.cfg_fc[1], self.cfg_fc[0], dtype=dtype, device=device)
+        h2_dvdt = torch.zeros(batch_size, self.cfg_fc[2], self.cfg_fc[1], dtype=dtype, device=device)
+        
+        h1_dtdu = torch.zeros(batch_size, self.cfg_fc[1], dtype=dtype, device=device)
+        h2_dtdu = torch.zeros(batch_size, self.cfg_fc[2], dtype=dtype, device=device)
+        
+        for step in range(self.num_steps):
+            # MNIST input encoding : Poisson spike generation
+            if self.task == 'mnist':
+                in_spike = (input * self.frate > torch.rand(input.size(), device=device)).view(batch_size, -1).float()
+            
+            # N-MNIST input encoding
+            elif self.task == 'nmnist':
+                in_spike = input[:,:,:,:, step].view(batch_size, -1)
+
             # Calculation of first hidden layer
-            ref[0], vm[0], vs[0], um[0], us[0], mem[0], sp[0] = noso(tau_m, tau_s, thresh, sp_in, ref[0], vm[0], vs[0], w[0], sp[0])
-            # dtdu evaluation upon postsynaptic spiking and accumulation of dtdu onto dtdu_append
-            dtdu_append[0] = dtdu(tau_m, tau_s, sp[0], um[0], us[0], dtdu_append[0])
-            # v evaluation upon postsynaptic spiking and accumulation of v onto v matrix
-            v[0] += cp.expand_dims((vm[0] - vs[0]),axis=1) * cp.expand_dims(sp[0].astype(float),axis=2)
-            # dvdt evaluation upon postsynaptic spiking and accumulation of dvdt onto dvdt_append
-            dvdt_append[0] += cp.expand_dims((vm[0]/tau_m - vs[0]/tau_s),axis=1) * cp.expand_dims(sp[0].astype(float),axis=2)
-            spike_sum[0] += sp[0]
-            for i in range(1, nlayer):
-                ref[i], vm[i], vs[i], um[i], us[i], mem[i], sp[i] = noso(tau_m, tau_s, thresh, sp[i-1], ref[i], vm[i], vs[i], w[i], sp[i])
-                dtdu_append[i] = dtdu(tau_m, tau_s, sp[i], um[i], us[i], dtdu_append[i])
-                v[i] += cp.expand_dims((vm[i] - vs[i]),axis=1) * cp.expand_dims(sp[i].astype(float),axis=2)
-                dvdt_append[i] += cp.expand_dims((vm[i]/tau_m - vs[i]/tau_s),axis=1) * cp.expand_dims(sp[i].astype(float),axis=2)
-                spike_sum[i] += sp[i]
-            # Recoding of output spike timings
-            outt += sp[-1].astype(float)*(t - num_steps)
-        return outt, dtdu_append, v, dvdt_append, spike_sum
-    else:
-        h2_out = cp.zeros((batch_size, cfg_fc[-1])) 
-        for t in range(num_steps):                   
-            sp_in = inputs*frate > cp.random.rand(inputs.shape[0], inputs.shape[1])
-            #first hidden layer
-            ref[0], vm[0], vs[0], um[0], us[0], mem[0], sp[0] = noso(tau_m, tau_s, thresh, sp_in, ref[0], vm[0], vs[0], w[0], sp[0])
-            spike_sum[0] += sp[0]
-            for i in range(1, nlayer):
-                ref[i], vm[i], vs[i], um[i], us[i], mem[i], sp[i] = noso(tau_m, tau_s, thresh, sp[i-1], ref[i], vm[i], vs[i], w[i], sp[i])
-                spike_sum[i] += sp[i]
-            outt += sp[-1].astype(float)*(t - num_steps)     
-            h2_out += sp[-1].astype(float) * mem[-1]
-        return outt, h2_out, spike_sum
+            h1_sav, h1_vm, h1_vs, h1_um, h1_us, h1_spike = noso(self.thresh, 
+                                                                self.tau_m, 
+                                                                self.tau_s, 
+                                                                self.fc1, 
+                                                                in_spike, 
+                                                                h1_sav, 
+                                                                h1_vm, 
+                                                                h1_vs, 
+                                                                h1_spike, 
+                                                                outneuron=False)
+            # Calculation of output layer
+            h2_sav, h2_vm, h2_vs, h2_um, h2_us, h2_u, h2_spike = noso(self.thresh, 
+                                                                      self.tau_m, 
+                                                                      self.tau_s, 
+                                                                      self.fc2, 
+                                                                      h1_spike, 
+                                                                      h2_sav, 
+                                                                      h2_vm, 
+                                                                      h2_vs, 
+                                                                      h2_spike, 
+                                                                      outneuron=True)
+            
+            # Recoding of output spike timings and output membrane potential  
+            out_t += dodt.apply(h2_spike, step, self.num_steps)
+            out_u += h2_spike * h2_u
+
+            sum_sp[0] += in_spike.sum().item()
+            sum_sp[1] += h1_spike.sum().item()
+            sum_sp[2] += h2_spike.sum().item()
+            
+            # for backprop
+            h1_v += torch.unsqueeze((h1_vm - h1_vs), 1) * torch.unsqueeze(h1_spike, 2)
+            h2_v += torch.unsqueeze((h2_vm - h2_vs), 1) * torch.unsqueeze(h2_spike, 2)  
+            
+            h1_dvdt += torch.unsqueeze((h1_vm / self.tau_m - h1_vs / self.tau_s), 1) * torch.unsqueeze(h1_spike, 2)
+            h2_dvdt += torch.unsqueeze((h2_vm / self.tau_m - h2_vs / self.tau_s), 1) * torch.unsqueeze(h2_spike, 2)
+                        
+            h1_dtdu += dtdu_backward(h1_um, h1_us, h1_spike, self.thresh, self.tau_m, self.tau_s)
+            h2_dtdu += dtdu_backward(h2_um, h2_us, h2_spike, self.thresh, self.tau_m, self.tau_s)
+
+            if out_t.max() < self.num_steps:
+                return out_t, out_u, sum_sp, [h1_v, h2_v], [h1_dvdt, h2_dvdt], [h1_dtdu, h2_dtdu]
+        return out_t, out_u, sum_sp, [h1_v, h2_v], [h1_dvdt, h2_dvdt], [h1_dtdu, h2_dtdu]
+    
+   
