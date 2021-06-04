@@ -3,6 +3,7 @@ import time
 import torch
 import torch.nn as nn
 import numpy as np
+import random
 import argparse
 
 from utils import load_data
@@ -16,9 +17,9 @@ dtype = torch.float
 
 parser = argparse.ArgumentParser(description='BPTC+NOSO MNIST/N-MNIST')
 
-parser.add_argument('--task', type=str, default='mnist', help='which task to run (mnist or nmnist)')
+parser.add_argument('--task', type=str, default='nmnist', help='which task to run (mnist or nmnist)')
 parser.add_argument('--network', type=str, default='fcn', help='which network to run (fcn or cnn)')
-parser.add_argument('--eval_mode', type=bool, default=False, help='evaluation without learning')
+parser.add_argument('--mode', type=str, default='train', help='whether to train or test ')
 
 # Hyperparameters
 parser.add_argument('--thresh', type=float, default=0.05, help='Spiking threshold [mV]')
@@ -41,7 +42,7 @@ def main():
     train_loader, test_loader = load_data(args.task, args.batch_size)   
     criterion = nn.CrossEntropyLoss().to(device)
     
-    if args.eval_mode == False:
+    if args.mode == 'train':
         model = make_model(args.network, args.task, args.thresh, args.tau_m, args.tau_s, args.num_steps, args.frate).to(device)
         optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_decay_interval, gamma=args.lr_decay_rate)
@@ -55,7 +56,7 @@ def main():
         for epoch in range(args.num_epochs):
             start_time = time.time()
             
-            train_loss, spike_map_train, lr_ = train(model, train_loader, criterion, epoch, optimizer, scheduler)
+            train_loss, spike_map_train = train(model, train_loader, criterion, epoch, optimizer, scheduler)
             test_loss, spike_map_test, acc = test(model, test_loader, criterion)
             
             spike_train_hist.append(spike_map_train)
@@ -72,7 +73,11 @@ def main():
             
             save_model(names, model, acc, epoch, acc_hist, train_loss_hist, test_loss_hist, spike_train_hist, spike_test_hist)
 
-    elif args.eval_mode == True:
+    elif args.mode == 'eval':
+        torch.manual_seed(1)
+        np.random.seed(1)
+        random.seed(1)
+        
         names = names + '_saved'
         thresh, tau_m, tau_s, num_steps, frate = load_hyperparemeter(names)
         model = make_model(args.network, args.task, thresh, tau_m, tau_s, num_steps, frate).to(device)
@@ -84,9 +89,10 @@ def train(model, train_loader, criterion, epoch, optimizer, scheduler):
     model.train()
     train_loss = 0
     for i, (images, labels) in enumerate(train_loader):
+        spike_map_train = list([])
         model.zero_grad()
         optimizer.zero_grad()
-        outputs = model(images, args.batch_size)
+        outputs = model(images.to(device), args.batch_size)
         
         # outputs[0]: output spike timings
         # outputs[1]: mebrane potential of output neurons when spiking
@@ -96,13 +102,13 @@ def train(model, train_loader, criterion, epoch, optimizer, scheduler):
         train_loss += loss.item() / len(train_loader)
         loss.backward()
         optimizer.step()
-        spike_map_train = outputs[2]
+        spike_map_train.append(outputs[2])
     
     # learning rate scheduling
     scheduler.step()
     optimizer.param_groups[0]["lr"] = np.clip(optimizer.param_groups[0]["lr"], args.min_lr, args.learning_rate)
         
-    return train_loss, spike_map_train, optimizer.param_groups[0]["lr"]
+    return train_loss, spike_map_train
 
 def test(model, test_loader, criterion):
     model.eval()
@@ -111,7 +117,8 @@ def test(model, test_loader, criterion):
     total = 0
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):
-            outputs = model(inputs, args.batch_size)
+            spike_map_test = list([])
+            outputs = model(inputs.to(device), args.batch_size)
                     
             # outputs[0]: output spike timings
             # outputs[1]: mebrane potential of output neurons when spiking
@@ -123,7 +130,8 @@ def test(model, test_loader, criterion):
             total += float(targets.size(0))
             correct += float(predicted.eq(targets).sum().item())
             acc = 100. * float(correct) / float(total)
-            spike_map_test = outputs[2] 
+            
+            spike_map_test.append(outputs[2])
     
     return test_loss, spike_map_test, acc
 
