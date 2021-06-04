@@ -10,7 +10,7 @@ pip install -r requirements.txt
 ```
 
 ### Dataset
-MNIST: dataset
+[MNIST dataset](http://yann.lecun.com/exdb/mnist/)
 
 [N-MNIST](https://www.garrickorchard.com/datasets/n-mnist) dataset loader was adapted from [PySNN](https://github.com/BasBuller/PySNN) and modified.
 
