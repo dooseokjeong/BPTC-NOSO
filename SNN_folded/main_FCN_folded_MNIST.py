@@ -1,157 +1,148 @@
-import torchvision
-import torchvision.transforms as transforms
-import os
+from __future__ import print_function
 import time
 import torch
+import torch.nn as nn
 import numpy as np
-import cupy as cp 
-from network import SNN_folded
-from utils import CEloss, num_correct
+import argparse
+
+from functions import CEloss
+from utils import load_data
+from utils import load_hyperparemeter
+from utils import make_model
+from utils import load_model
+from utils import save_model
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+dtype = torch.float
+
+parser = argparse.ArgumentParser(description='BPTC+NOSO MNIST/N-MNIST')
+
+parser.add_argument('--task', type=str, default='nmnist', help='which task to run (mnist or nmnist)')
+parser.add_argument('--network', type=str, default='fcn', help='which network to run (fcn)')
+parser.add_argument('--mode', type=str, default='train', help='whether to train or test')
 
 # Hyperparameters
-thresh = .05    # Spiking threshold
-tau_m = 80      # Time constant of membrane potential kernel [ms]
-tau_s = 20      # Time constant of synaptic current kernel   [ms]   
-const = tau_m / (tau_m - tau_s)
-decay_m, decay_s = np.exp(-1 / tau_m), np.exp(-1 / tau_s)
-batch_size = 200    # Batch size
-learning_rate = 1E-2    # Initial learning rate
-num_epochs = 200        # Maximum number of epochs
-num_steps = 32          # Number of time steps
-frate = 0.2             # Maximum input firing rate [x1000 Hz]
-reg = 1E-2              # Weight decay (L2 regularization) rate
-lr_decay_rate = 0.5     # Learning rate decay rate
-lr_decay_interval = 20   # Learning rate decay interval
-min_lr = 1E-4           # Minimum learning rate
+parser.add_argument('--thresh', type=float, default=0.05, help='Spiking threshold [mV]')
+parser.add_argument('--tau_m', type=float, default=80, help='Time constant of membrane potential kernel [ms]')
+parser.add_argument('--tau_s', type=float, default=20, help='Time constant of synaptic current kernel [ms]')
+parser.add_argument('--batch_size', type=int, default=200, help='Batch size')
+parser.add_argument('--num_epochs', type=int, default=100, help='Maximum number of epochs')
+parser.add_argument('--num_steps', type=int, default=32, help='Number of time steps')
+parser.add_argument('--frate', type=float, default=0.2, help='Maximum input firing rate [x1000 Hz]')
+parser.add_argument('--weight_decay', type=float, default=1E-2, help='Weight decay (L2 regularization) coefficient')
+parser.add_argument('--learning_rate', type=float, default=5E-2, help='Initial learning rate')
+parser.add_argument('--lr_decay_rate', type=float, default=0.5, help='Learning rate decay rate')
+parser.add_argument('--lr_decay_interval', type=int, default=10, help='Learning rate decay interval')
+parser.add_argument('--min_lr', type=float, default=5E-4, help='Minimum learning rate')
 
-cfg_fc = [784, 400, 10] # FCN structure
-nlayer = len(cfg_fc)-1  # Number of layers
-w = [cp.random.normal(loc=0, scale=cp.sqrt(2/cfg_fc[i]), size=(cfg_fc[i+1], cfg_fc[i])) for i in range(nlayer)] # Weight initialization
+args = parser.parse_args()
 
-def lr_scheduler(learning_rate, epoch, decay_epoch, decay_rate, minlr):
-    if epoch % decay_epoch == 0 and epoch >1:
-        temp = learning_rate*decay_rate
-        learning_rate1 = temp*(temp > minlr) + minlr*(temp <= minlr)
-    else:
-        learning_rate1 = learning_rate
-    return learning_rate1
-
-names = 'spiking_model_fcn'
-data_path =  './Dataset/'
-train_dataset = torchvision.datasets.MNIST(root= data_path, train=True, download=True, transform=transforms.ToTensor())
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-test_set = torchvision.datasets.MNIST(root= data_path, train=False, download=True, transform=transforms.ToTensor())
-test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=0)
-
-best_acc = 0  # best test accuracy
-start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-loss_train_epoch = 0 # Training loss per epoch
-loss_test_epoch = 0 # Test loss per epoch
-
-# List initialization
-acc_record = list([])
-loss_train_record = list([])
-loss_test_record = list([])
-spike_train_record = list([])
-spike_test_record = list([])
-
-for epoch in range(num_epochs):
-    running_loss = 0
-    loss_train_epoch = 0
-    loss_test_epoch = 0
-    spike_train_epoch = 0
-    spike_test_epoch = 0
-    start_time = time.time()
-    for i, (images, labels) in enumerate(train_loader):
-        # Forward propagation       
-        outputs = SNN_folded(cfg_fc, 
-                              tau_m, 
-                              tau_s, 
-                              thresh, 
-                              num_steps,
-                              frate,
-                              images, 
-                              batch_size, 
-                              w, 
-                              grad_eval=True)
-        # outputs[0]: output spike timings
-        # outputs[1]: dtdu array
-        # outputs[2]: dvdt array
-        # outputs[3]: spike map over SNN    
-        dldt, loss = CEloss(outputs[0], labels, batch_size) # Gradient of loss and loss evaluations
-        spike_train_epoch += outputs[3][0].sum() + outputs[3][1].sum() # Summation of spikes generated over batches
+def main():
+    with torch.no_grad():
+        names = args.task + '_' + args.network
+        train_loader, test_loader = load_data(args.task, args.batch_size)   
+        criterion = nn.CrossEntropyLoss().to(device)
         
-        # Backpropagation of errors based on temporal code
-        learning_rate = lr_scheduler(learning_rate, epoch, decay_epoch=lr_decay_interval, decay_rate=lr_decay_rate, minlr=min_lr)
-        delta = dldt * outputs[1][-1]   # Evaluation of errors of output layer 
-        dw1 = -learning_rate * outputs[2][-1] * cp.expand_dims(delta, axis=2)   # \delta_w evaluation for W(2)        
-        dtemp = cp.matmul(cp.transpose(w[-1]*outputs[3][-1],(0,2,1)),cp.expand_dims(delta, axis=2)) # Backpropagation of erros toward first hidden layer
-        delta = cp.squeeze(dtemp,axis=2) * outputs[1][0]    # Evaluation of errors of first hidden layer
-        dw0 = -learning_rate * outputs[2][0] * cp.expand_dims(delta, axis=2)    # \delta_w evaluation for W(1)
-        
-        w[-1] += cp.mean(dw1,axis=0)            # w(2) update
-        w[-1] -= learning_rate * reg * w[-1]    # L2 regularization
-        w[0] += cp.mean(dw0,axis=0)             # w(1) update
-        w[0] -= learning_rate * reg * w[0]      # L2 regularization
+        if args.mode == 'train':
+            model = make_model(args.network, args.task, args.thresh, args.tau_m, args.tau_s, args.num_steps, args.frate).to(device)
+            optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_decay_interval, gamma=args.lr_decay_rate)
+            
+            acc_hist = list([])
+            train_loss_hist = list([])
+            test_loss_hist = list([])
+            spike_train_hist = list([])
+            spike_test_hist = list([])
+            
+            for epoch in range(args.num_epochs):
+                start_time = time.time()
+                
+                train_loss, spike_map_train, lr_ = train(model, train_loader, criterion, epoch, optimizer, scheduler)
+                test_loss, spike_map_test, acc = test(model, test_loader, criterion)
+                
+                spike_train_hist.append(spike_map_train)
+                spike_test_hist.append(spike_map_test)
+                acc_hist.append(acc)
+                train_loss_hist.append(train_loss)
+                test_loss_hist.append(test_loss)
+                
+                print("Epoch: {}/{}.. ".format(epoch+1, args.num_epochs).ljust(14),
+                          "Train Loss: {:.3f}.. ".format(train_loss).ljust(20),
+                          "Test Loss: {:.3f}.. ".format(test_loss).ljust(19),
+                          "Test Accuracy: {:.3f}".format(acc))        
+                print('Time elasped: %.2f' %(time.time()-start_time), '\n')
+                
+                save_model(names, model, acc, epoch, acc_hist, train_loss_hist, test_loss_hist, spike_train_hist, spike_test_hist)
 
-        running_loss += loss
-        loss_train_epoch += loss
-        if (i+1)%100 == 0:
-             print ('Epoch [%d/%d], Iteration [%d/%d], Loss: %.5f'
-                    %(epoch+1, num_epochs, i+1, len(train_dataset)//batch_size,running_loss))
-             running_loss = 0  
-    print('Time elapsed:', time.time()-start_time)
+        elif args.mode == 'eval':
+            names = names + '_saved'
+            thresh, tau_m, tau_s, num_steps, frate = load_hyperparemeter(names)
+            model = make_model(args.network, args.task, thresh, tau_m, tau_s, num_steps, frate).to(device)
+            model = load_model(names, model)
+            test_loss, spike_map_test, acc = test(model, test_loader, criterion)
+            print("Test Loss: {:.3f}.. ".format(test_loss).ljust(19), "Test Accuracy: {:.3f}".format(acc))
+        
+def train(model, train_loader, criterion, epoch, optimizer, scheduler):
+    train_loss = 0
+    with torch.no_grad():
+        for i, (images, labels) in enumerate(train_loader):
+            spike_map_train = list([])
+            outputs = model(images.to(device), args.batch_size)
+            
+            # outputs[0]: output spike timings
+            # outputs[1]: mebrane potential of output neurons when spiking
+            # outputs[2]: spike map over SNN
+            # outputs[3]: v array
+            # outputs[4]: dvdt array
+            # outputs[5]: dtdu array
+            
+            spike_map_train.append(outputs[2])
+            dldt, loss = CEloss(outputs[0].cpu(), labels, args.batch_size)
+            train_loss += loss.item() / len(train_loader)   
+                 
+            # Backpropagation of errors based on temporal code
+            delta = dldt.to(device) * outputs[5][1]  
+            dw1 = optimizer.param_groups[0]["lr"] * outputs[3][-1] * torch.unsqueeze(delta, 2)   
+            dtemp = torch.matmul((model.fc2.weight.data * outputs[4][1]).permute(0,2,1), torch.unsqueeze(delta, 2)) 
+            delta = torch.squeeze(dtemp, 2) * outputs[5][0]    
+            dw0 = optimizer.param_groups[0]["lr"] * outputs[3][0] * torch.unsqueeze(delta, 2)    
+            
+            model.fc2.weight.data -= torch.mean(dw1, 0)                                                             # w(2) update
+            model.fc2.weight.data -= optimizer.param_groups[0]["lr"] * args.weight_decay * model.fc2.weight.data    # L2 regularization
+            model.fc1.weight.data -= torch.mean(dw0, 0)                                                             # w(1) update
+            model.fc1.weight.data -= optimizer.param_groups[0]["lr"] * args.weight_decay * model.fc1.weight.data    # L2 regularization
+            
+            optimizer.step()        
+        
+        # learning rate scheduling
+        scheduler.step()
+        optimizer.param_groups[0]["lr"] = np.clip(optimizer.param_groups[0]["lr"], args.min_lr, args.learning_rate)
+        
+    return train_loss, spike_map_train, optimizer.param_groups[0]["lr"]
+
+def test(model, test_loader, criterion):
+    model.eval()
+    test_loss = 0
     correct = 0
     total = 0
-    # Test network    
-    for batch_idx, (inputs, targets) in enumerate(test_loader):        
-        outputs = SNN_folded(cfg_fc, 
-                              tau_m, 
-                              tau_s, 
-                              thresh, 
-                              num_steps,
-                              frate,
-                              inputs, 
-                              batch_size, 
-                              w, 
-                              grad_eval=False)  
-        # outputs[0]: output spike timings
-        # outputs[1]: mebrane potential of output neurons when spiking
-        # outputs[2]: spike map over SNN
-        
-        correct += num_correct(outputs, targets)    # Number of correct classification cases
-        total += batch_size
-        spike_test_epoch += outputs[2][0].sum() + outputs[2][1].sum()   # Summation of spikes generated over batches
-        dldt, loss = CEloss(outputs[0], targets, batch_size)     # Gradient of loss and loss evaluations
-        loss_test_epoch += loss      # Summation of losses over epochs 
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(test_loader):
+            spike_map_test = list([])
+            outputs = model(inputs.to(device), args.batch_size)
+                    
+            # outputs[0]: output spike timings
+            # outputs[1]: mebrane potential of output neurons when spiking
+            # outputs[2]: spike map over SNN
+            
+            dldt, loss = CEloss(outputs[0].cpu(), targets, args.batch_size)
+            test_loss += loss.item() / len(test_loader)
+            _, predicted = (outputs[1].cpu() * (outputs[0].cpu() == (outputs[0].cpu().min(1))[0][:, None])).max(1)
+            total += float(targets.size(0))
+            correct += float(predicted.eq(targets).sum().item())
+            acc = 100. * float(correct) / float(total)
+            spike_map_test.append(outputs[2])
+    
+    return test_loss, spike_map_test, acc
 
-    print('\n')
-    print('Epoch num:', epoch)
-    print('Test Accuracy on test images: %.3f' % (100 * correct / total))
-    print('Training loss: %.3f, Test loss: %.3f' % (loss_train_epoch, loss_test_epoch))
-    acc = 100 * correct / total
-    acc_record.append(acc)
-    loss_train_record.append(loss_train_epoch)
-    loss_test_record.append(loss_test_epoch)
-    spike_train_record.append(spike_train_epoch)
-    spike_test_record.append(spike_test_epoch)
-    if (epoch+1) % 10 == 0:
-        print(acc)
-        print('Saving..')
-        state = {
-            'acc': acc,
-            'epoch': epoch,
-            'acc_record': acc_record,
-            'best accuracy': max(acc_record),
-            'loss_train_record': loss_train_record,
-            'loss_test_record': loss_test_record,
-            'Spike_train_record': spike_train_record,
-            'Spike_test_record': spike_test_record 
-        }
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt' + names + '.t7')
-        best_acc = acc
+if __name__=='__main__':
+    main()
