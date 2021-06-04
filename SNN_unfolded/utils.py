@@ -99,6 +99,6 @@ def save_model(names, model, acc, epoch, acc_hist, train_loss_hist, test_loss_hi
     best_acc = max(acc_hist)
     
     if acc == best_acc:
-        torch.save(state, './checkpoint/' + names + '.best')
+        torch.save(state, './checkpoint/' + names + '_best')
         
- 
+        
