@@ -48,11 +48,11 @@ class fcn(nn.Module):
         for step in range(self.num_steps):
             # MNIST input encoding : Poisson spike generation
             if self.task == 'mnist':
-                in_spike = (input * self.frate > torch.rand(input.size())).view(batch_size, -1).float().to(device=device)
+                in_spike = (input * self.frate > torch.rand(input.size(), device=device)).view(batch_size, -1).float()
             
             # N-MNIST input encoding
             elif self.task == 'nmnist':
-                in_spike = input[:,:,:,:, step].view(batch_size, -1).to(device=device)
+                in_spike = input[:,:,:,:, step].view(batch_size, -1)
 
             # Calculation of first hidden layer
             h1_sav, h1_vm, h1_vs, h1_um, h1_us, h1_spike = noso(self.thresh, 
@@ -161,11 +161,11 @@ class cnn(nn.Module):
         for step in range(self.num_steps): # simulation time steps            
             # MNIST input encoding : Poisson spike generation
             if self.task == 'mnist':
-                in_spike = (input * self.frate > torch.rand(input.size())).float().to(device=device)
+                in_spike = (input * self.frate > torch.rand(input.size(), device=device)).float()
             
             # N-MNIST input encoding
             elif self.task == 'nmnist':
-                in_spike = input[:, :, 1:33, 1:33, step].to(device=device)
+                in_spike = input[:, :, 1:33, 1:33, step]
             
             # Calculation of first convolutional layer
             hc1_sav, hc1_vm, hc1_vs, hc1_um, hc1_us, hc1_spike = noso(self.thresh, 
