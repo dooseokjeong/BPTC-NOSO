@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(description='BPTC+NOSO MNIST/N-MNIST')
 
 parser.add_argument('--task', type=str, default='nmnist', help='which task to run (mnist or nmnist)')
 parser.add_argument('--network', type=str, default='fcn', help='which network to run (fcn or cnn)')
-parser.add_argument('--mode', type=str, default='train', help='whether to train or test ')
+parser.add_argument('--mode', type=str, default='train', help='whether to train or test')
 
 # Hyperparameters
 parser.add_argument('--thresh', type=float, default=0.05, help='Spiking threshold [mV]')
