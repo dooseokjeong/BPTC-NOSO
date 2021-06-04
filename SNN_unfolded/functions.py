@@ -14,13 +14,13 @@ class dtdu(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        u, u_m, u_s = ctx.saved_tensors
+        u, um, us = ctx.saved_tensors
         thresh = ctx.thresh
         tau_m = ctx.tau_m 
         tau_s = ctx.tau_s
-        temp2 = u_m / tau_m - u_s / tau_s
-        temp2 = torch.where(temp2 != 0, 1 / temp2, temp2)
-        grad_u = grad_output * u.gt(thresh).float() * torch.clamp(temp2, -100, 100)
+        temp = um / tau_m - us / tau_s
+        temp = torch.where(temp != 0, 1 / temp, temp)
+        grad_u = grad_output * u.gt(thresh).float() * torch.clamp(temp, -100, 100)
         return grad_u, None, None, None, None, None
 
 
